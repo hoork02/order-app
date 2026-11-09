@@ -1,0 +1,301 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Order Processing Portal</title>
+    <style>
+        :root { --primary: #1e40af; --bg: #f8fafc; --card: #ffffff; --text: #0f172a; --border: #cbd5e1; }
+        body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background: var(--bg); color: var(--text); margin: 0; padding: 20px; }
+        .container { max-width: 950px; margin: 0 auto; }
+        .card { background: var(--card); padding: 25px; border-radius: 8px; border: 1px solid var(--border); box-shadow: 0 2px 4px rgba(0,0,0,0.05); margin-bottom: 25px; }
+        h2, h3 { margin-top: 0; color: var(--primary); }
+        .form-row { display: flex; gap: 15px; align-items: center; margin-bottom: 15px; }
+        .form-group { flex: 1; }
+        select, input, button { padding: 8px 12px; border: 1px solid var(--border); border-radius: 4px; box-sizing: border-box; }
+        select, input { width: 100%; }
+        button { background: var(--primary); color: white; border: none; font-weight: bold; cursor: pointer; }
+        button:hover { opacity: 0.9; }
+        table { width: 100%; border-collapse: collapse; margin-top: 15px; }
+        th, td { padding: 10px; text-align: left; border-bottom: 1px solid var(--border); }
+        th { background: #f1f5f9; }
+        .receipt-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; background: #eff6ff; padding: 15px; border-radius: 6px; margin-top: 15px; }
+        .receipt-total { grid-column: span 2; font-size: 1.1em; font-weight: bold; color: #1e3a8a; margin-top: 10px; }
+        .error { color: #dc2626; font-weight: bold; margin-top: 10px; }
+    </style>
+</head>
+<body>
+
+<div class="container">
+    <h2>🛍️ Order Processing Application</h2>
+
+    <!-- SECTION 1: NEW ORDER FORM -->
+    <div class="card">
+        <h3>1. New Order</h3>
+        <div class="form-row">
+            <div class="form-group">
+                <label>Customer:</label>
+                <select id="customerSelect" onchange="updateCustomerAddress()">
+                    <option value="">-- Select Customer --</option>
+                </select>
+            </div>
+            <div class="form-group">
+                <label>Address:</label>
+                <input type="text" id="customerAddress" readonly placeholder="Customer address will display here..." style="background: #f1f5f9;">
+            </div>
+        </div>
+
+        <hr style="border: 0; border-top: 1px solid var(--border); margin: 20px 0;">
+
+        <div class="form-row">
+            <div class="form-group" style="flex: 2;">
+                <label>Product:</label>
+                <select id="productSelect" onchange="updateUnitPrice()">
+                    <option value="">-- Select Product --</option>
+                </select>
+            </div>
+            <div class="form-group">
+                <label>Unit Price:</label>
+                <input type="text" id="productUnitPrice" readonly placeholder="0.00" style="background: #f1f5f9;">
+            </div>
+            <div class="form-group">
+                <label>Quantity:</label>
+                <input type="number" id="itemQuantity" min="1" value="1">
+            </div>
+            <div style="align-self: flex-end;">
+                <button type="button" onclick="addLineItem()">Add Item</button>
+            </div>
+        </div>
+
+        <h4>Line Items:</h4>
+        <table>
+            <thead>
+                <tr>
+                    <th>Product</th>
+                    <th>Qty</th>
+                    <th>Unit Price</th>
+                    <th>Line Total</th>
+                    <th>Action</th>
+                </tr>
+            </thead>
+            <tbody id="lineItemsTable">
+                <tr><td colspan="5" style="text-align: center; color: #64748b;">No items added yet.</td></tr>
+            </tbody>
+        </table>
+
+        <div style="margin-top: 20px; display: flex; gap: 10px;">
+            <button type="button" onclick="submitOrder()" style="background: #16a34a; padding: 10px 20px;">Submit Order</button>
+            <button type="button" onclick="clearCart()" style="background: #64748b;">Clear</button>
+        </div>
+        <div id="orderError" class="error"></div>
+    </div>
+
+    <!-- SECTION 2: PROCESSED ORDER DETAILS -->
+    <div id="receiptCard" class="card" style="display: none;">
+        <h3>2. Processed Order Details</h3>
+        <div id="receiptContent"></div>
+    </div>
+
+    <!-- SECTION 3: ORDER HISTORY -->
+    <div class="card">
+        <h3>3. Order History</h3>
+        <button onclick="loadOrderHistory()" style="background: #0284c7; margin-bottom: 10px;">Refresh History</button>
+        <table>
+            <thead>
+                <tr>
+                    <th>Order ID</th>
+                    <th>Customer</th>
+                    <th>Date</th>
+                    <th>Final Amount</th>
+                    <th>Action</th>
+                </tr>
+            </thead>
+            <tbody id="orderHistoryTable">
+                <!-- Populated dynamically -->
+            </tbody>
+        </table>
+    </div>
+</div>
+
+<script>
+    const API = 'http://localhost:8080/api';
+    let customersMap = {};
+    let productsMap = {};
+    let cart = [];
+
+    window.onload = async () => {
+        await loadCustomers();
+        await loadProducts();
+        await loadOrderHistory();
+    };
+
+    async function loadCustomers() {
+        const res = await fetch(`${API}/customers`);
+        const data = await res.json();
+        const select = document.getElementById('customerSelect');
+        data.forEach(c => {
+            customersMap[c.customerId] = c;
+            select.innerHTML += `<option value="${c.customerId}">${c.name}</option>`;
+        });
+    }
+
+    async function loadProducts() {
+        const res = await fetch(`${API}/products`);
+        const data = await res.json();
+        const select = document.getElementById('productSelect');
+        data.forEach(p => {
+            productsMap[p.productId] = p;
+            select.innerHTML += `<option value="${p.productId}">${p.productName}</option>`;
+        });
+    }
+
+    function updateCustomerAddress() {
+        const id = document.getElementById('customerSelect').value;
+        document.getElementById('customerAddress').value = id ? customersMap[id].address : '';
+    }
+
+    function updateUnitPrice() {
+        const id = document.getElementById('productSelect').value;
+        document.getElementById('productUnitPrice').value = id ? productsMap[id].unitPrice.toFixed(2) : '0.00';
+    }
+
+    function addLineItem() {
+        const pId = document.getElementById('productSelect').value;
+        const qty = parseInt(document.getElementById('itemQuantity').value);
+        
+        if (!pId || qty <= 0) {
+            alert('Please select a valid product and enter a positive quantity.');
+            return;
+        }
+
+        const product = productsMap[pId];
+        const lineTotal = (product.unitPrice * qty).toFixed(2);
+
+        cart.push({ productId: product.productId, name: product.productName, unitPrice: product.unitPrice, quantity: qty, lineTotal });
+        renderCart();
+    }
+
+    function renderCart() {
+        const tbody = document.getElementById('lineItemsTable');
+        if (cart.length === 0) {
+            tbody.innerHTML = '<tr><td colspan="5" style="text-align: center; color: #64748b;">No items added yet.</td></tr>';
+            return;
+        }
+        tbody.innerHTML = cart.map((item, index) => `
+            <tr>
+                <td>${item.name}</td>
+                <td>${item.quantity}</td>
+                <td>$${item.unitPrice.toFixed(2)}</td>
+                <td>$${item.lineTotal}</td>
+                <td><button onclick="removeItem(${index})" style="background:#dc2626; padding: 4px 8px; font-size:12px;">Remove</button></td>
+            </tr>
+        `).join('');
+    }
+
+    function removeItem(index) {
+        cart.splice(index, 1);
+        renderCart();
+    }
+
+    function clearCart() {
+        cart = [];
+        renderCart();
+        document.getElementById('orderError').innerText = '';
+    }
+
+    async function submitOrder() {
+        const customerId = document.getElementById('customerSelect').value;
+        const errorEl = document.getElementById('orderError');
+        errorEl.innerText = '';
+
+        if (!customerId) {
+            errorEl.innerText = 'Please select a customer.';
+            return;
+        }
+        if (cart.length === 0) {
+            errorEl.innerText = 'Please add at least one line item to the order.';
+            return;
+        }
+
+        const payload = {
+            customerId: parseInt(customerId),
+            items: cart.map(item => ({ productId: item.productId, quantity: item.quantity }))
+        };
+
+        const res = await fetch(`${API}/orders`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(payload)
+        });
+
+        if (res.ok) {
+            const order = await res.json();
+            displayReceipt(order);
+            clearCart();
+            loadOrderHistory();
+        } else {
+            const errText = await res.text();
+            errorEl.innerText = `Error: ${errText}`;
+        }
+    }
+
+    function displayReceipt(order) {
+        const card = document.getElementById('receiptCard');
+        const container = document.getElementById('receiptContent');
+        card.style.display = 'block';
+
+        container.innerHTML = `
+            <p><strong>ORDER DETAILS — ORD-${String(order.orderId).padStart(3, '0')}</strong></p>
+            <p>Customer: <strong>${order.customer.name}</strong> | Address: ${order.customer.address}</p>
+            <table>
+                <thead><tr><th>Product</th><th>Qty</th><th>Unit Price</th><th>Subtotal</th></tr></thead>
+                <tbody>
+                    ${order.lineItems.map(i => `
+                        <tr>
+                            <td>${i.product.productName}</td>
+                            <td>${i.quantity}</td>
+                            <td>$${i.capturedUnitPrice.toFixed(2)}</td>
+                            <td>$${(i.capturedUnitPrice * i.quantity).toFixed(2)}</td>
+                        </tr>
+                    `).join('')}
+                </tbody>
+            </table>
+            <div class="receipt-grid">
+                <div>Subtotal: <strong>$${order.subtotal.toFixed(2)}</strong></div>
+                <div>Discount (10%): <strong>$${order.discountAmount.toFixed(2)}</strong></div>
+                <div>Tax (5%): <strong>$${order.taxAmount.toFixed(2)}</strong></div>
+                <div class="receipt-total">FINAL AMOUNT: $${order.finalAmount.toFixed(2)}</div>
+            </div>
+        `;
+    }
+
+    async function loadOrderHistory() {
+        const res = await fetch(`${API}/orders`);
+        const orders = await res.json();
+        const tbody = document.getElementById('orderHistoryTable');
+
+        if (orders.length === 0) {
+            tbody.innerHTML = '<tr><td colspan="5" style="text-align: center;">No orders found.</td></tr>';
+            return;
+        }
+
+        tbody.innerHTML = orders.map(o => `
+            <tr>
+                <td>ORD-${String(o.orderId).padStart(3, '0')}</td>
+                <td>${o.customer.name}</td>
+                <td>${new Date(o.orderDate).toLocaleString()}</td>
+                <td><strong>$${o.finalAmount.toFixed(2)}</strong></td>
+                <td><button onclick="viewOrder(${o.orderId})" style="background:#0284c7; padding:4px 8px; font-size:12px;">View</button></td>
+            </tr>
+        `).join('');
+    }
+
+    async function viewOrder(id) {
+        const res = await fetch(`${API}/orders/${id}`);
+        const order = await res.json();
+        displayReceipt(order);
+    }
+</script>
+
+</body>
+</html>

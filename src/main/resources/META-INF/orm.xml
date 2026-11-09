@@ -1,0 +1,100 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<entity-mappings xmlns="https://jakarta.ee/xml/ns/persistence/orm"
+                 xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+                 xsi:schemaLocation="https://jakarta.ee/xml/ns/persistence/orm https://jakarta.ee/xml/ns/persistence/orm_3_0.xsd"
+                 version="3.0">
+
+    <!-- Customer Mapping -->
+    <entity class="com.example.demo.Customer" name="Customer">
+        <table name="customers"/>
+        <attributes>
+            <id name="customerId">
+                <column name="customer_id"/>
+                <generated-value strategy="IDENTITY"/>
+            </id>
+            <basic name="name"/>
+            <basic name="email"/>
+            <basic name="phone"/>
+            <basic name="address"/>
+            <one-to-many name="orders" mapped-by="customer">
+                <cascade><cascade-all/></cascade>
+            </one-to-many>
+        </attributes>
+    </entity>
+
+    <!-- Product Mapping -->
+    <entity class="com.example.demo.Product" name="Product">
+        <table name="products"/>
+        <attributes>
+            <id name="productId">
+                <column name="product_id"/>
+                <generated-value strategy="IDENTITY"/>
+            </id>
+            <basic name="productName">
+                <column name="product_name"/>
+            </basic>
+            <basic name="description"/>
+            <basic name="unitPrice">
+                <column name="unit_price" precision="12" scale="2" nullable="false"/>
+            </basic>
+        </attributes>
+    </entity>
+
+    <!-- Order Mapping -->
+    <entity class="com.example.demo.Order" name="Order">
+        <table name="orders"/>
+        <attributes>
+            <id name="orderId">
+                <column name="order_id"/>
+                <generated-value strategy="IDENTITY"/>
+            </id>
+            <basic name="orderDate">
+                <column name="order_date"/>
+            </basic>
+            <basic name="status"/>
+            <basic name="subtotal">
+                <column precision="12" scale="2"/>
+            </basic>
+            <basic name="discountAmount">
+                <column precision="12" scale="2" name="discount_amount"/>
+            </basic>
+            <basic name="taxAmount">
+                <column precision="12" scale="2" name="tax_amount"/>
+            </basic>
+            <basic name="finalAmount">
+                <column precision="12" scale="2" name="final_amount"/>
+            </basic>
+            <many-to-one name="customer">
+                <join-column name="customer_id" nullable="false"/>
+            </many-to-one>
+            <!-- Fixed: orphan-removal is an attribute on one-to-many -->
+            <one-to-many name="lineItems" mapped-by="order" orphan-removal="true">
+                <cascade><cascade-all/></cascade>
+            </one-to-many>
+        </attributes>
+    </entity>
+
+    <!-- OrderLineItem Mapping -->
+    <!-- OrderLineItem Mapping -->
+    <entity class="com.example.demo.OrderLineItem" name="OrderLineItem">
+        <table name="order_line_items"/>
+        <attributes>
+            <id name="lineItemId">
+                <column name="line_item_id"/>
+                <generated-value strategy="IDENTITY"/>
+            </id>
+            <basic name="quantity"/>
+            <basic name="capturedUnitPrice">
+                <column name="captured_unit_price" precision="12" scale="2" nullable="false"/>
+            </basic>
+            <transient name="lineSubtotal"/>
+            <many-to-one name="order">
+                <join-column name="order_id" nullable="false"/>
+            </many-to-one>
+            <many-to-one name="product">
+                <join-column name="product_id" nullable="false"/>
+            </many-to-one>
+        </attributes>
+    </entity>
+
+</entity-mappings>
